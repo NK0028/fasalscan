@@ -71,7 +71,7 @@ export default function ResultCard({ scan, compact = false }) {
           {w && (
             <div className="detail-row">
               <span>{s.weather}</span>
-              <span>{w.source === "open-meteo" ? s.weatherLive(w) : s.weatherSeasonal(w)}</span>
+              <span>{w.source === "seasonal" || w.source === "default" ? s.weatherSeasonal(w) : s.weatherLive(w)}</span>
             </div>
           )}
         </div>

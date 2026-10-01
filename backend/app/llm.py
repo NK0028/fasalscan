@@ -143,55 +143,96 @@ def _facts(report: dict, weather: dict) -> dict:
     }
 
 
-_FALLBACK_MODELS = ["llama-3.3-70b-versatile", "openai/gpt-oss-120b", "llama-3.1-8b-instant", "openai/gpt-oss-20b"]
+# Preferred order. The first one this API key can actually use is picked at runtime.
+_PREFERRED_MODELS = [
+    "llama-3.3-70b-versatile", "openai/gpt-oss-120b", "qwen/qwen3-32b",
+    "llama-3.1-8b-instant", "openai/gpt-oss-20b",
+]
 _last_error: dict = {"llm": None}
+_available: dict = {"models": None}
+
+
+async def _models(client: httpx.AsyncClient) -> list[str]:
+    """Models this key can use, in our preferred order (cached after the first call)."""
+    if _available["models"] is None:
+        try:
+            r = await client.get(
+                f"{settings.GROQ_BASE_URL}/models",
+                headers={"Authorization": f"Bearer {settings.GROQ_API_KEY}"},
+            )
+            r.raise_for_status()
+            ids = {m["id"] for m in r.json().get("data", [])}
+            wanted = [settings.LLM_MODEL] + [m for m in _PREFERRED_MODELS if m != settings.LLM_MODEL]
+            chosen = [m for m in wanted if m in ids]
+            # anything else that looks like a chat model, as a last resort
+            chosen += sorted(m for m in ids if m not in chosen and not any(
+                x in m for x in ("whisper", "guard", "orpheus", "tts", "safeguard")))
+            _available["models"] = chosen
+            log.info("LLM models usable with this key: %s", chosen[:6])
+        except (httpx.HTTPError, KeyError, ValueError) as exc:
+            log.warning("Could not list models: %s", exc)
+            return [settings.LLM_MODEL] + [m for m in _PREFERRED_MODELS if m != settings.LLM_MODEL]
+    return _available["models"]
+
+
+def _payload(model: str, messages: list[dict], max_tokens: int) -> dict:
+    body = {"model": model, "messages": messages, "temperature": 0.4}
+    if "gpt-oss" in model:
+        # reasoning models spend tokens thinking before they answer
+        body.update({"reasoning_effort": "low", "include_reasoning": False, "max_completion_tokens": max_tokens + 1024})
+    elif "qwen3" in model:
+        body.update({"reasoning_effort": "none", "max_completion_tokens": max_tokens + 256})
+    else:
+        body["max_tokens"] = max_tokens
+    return body
 
 
 async def _chat(messages: list[dict], max_tokens: int = 350) -> str | None:
     if not settings.GROQ_API_KEY:
         return None
-    models = [settings.LLM_MODEL] + [m for m in _FALLBACK_MODELS if m != settings.LLM_MODEL]
+    headers = {"Authorization": f"Bearer {settings.GROQ_API_KEY}"}
     async with httpx.AsyncClient(timeout=settings.LLM_TIMEOUT) as client:
-        for model in models:
+        for model in (await _models(client))[:5]:
             try:
                 r = await client.post(
                     f"{settings.GROQ_BASE_URL}/chat/completions",
-                    headers={"Authorization": f"Bearer {settings.GROQ_API_KEY}"},
-                    json={"model": model, "messages": messages, "temperature": 0.4, "max_tokens": max_tokens},
+                    headers=headers,
+                    json=_payload(model, messages, max_tokens),
                 )
             except httpx.HTTPError as exc:
                 _last_error["llm"] = f"{type(exc).__name__}: {exc}"
                 log.warning("LLM request failed (%s): %s", model, exc)
                 return None
-            if r.status_code in (400, 404) and "model" in r.text.lower():
-                _last_error["llm"] = f"{model}: {r.status_code} {r.text[:200]}"
-                log.warning("LLM model %s unavailable: %s", model, r.text[:300])
-                continue  # try the next model
+            if r.status_code == 429:
+                _last_error["llm"] = f"{model}: rate limited"
+                continue
             if r.status_code != 200:
                 _last_error["llm"] = f"{model}: {r.status_code} {r.text[:200]}"
                 log.warning("LLM call failed (%s): %s %s", model, r.status_code, r.text[:300])
-                return None
+                continue
             try:
-                msg = r.json()["choices"][0]["message"]
-                text = msg.get("content") or ""
+                text = r.json()["choices"][0]["message"].get("content") or ""
             except (KeyError, IndexError, ValueError) as exc:
-                _last_error["llm"] = f"bad response: {exc}"
-                return None
+                _last_error["llm"] = f"{model}: bad response {exc}"
+                continue
             text = re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()
-            if text:
-                if model != settings.LLM_MODEL:
-                    settings.LLM_MODEL = model  # remember the one that works
-                _last_error["llm"] = None
-                return text
-            return None
+            if not text:
+                _last_error["llm"] = f"{model}: empty answer"
+                continue
+            if model != settings.LLM_MODEL:
+                log.info("Using LLM model %s", model)
+                settings.LLM_MODEL = model  # stick with the one that works
+            _last_error["llm"] = None
+            return text
     return None
 
 
 async def llm_status() -> dict:
     if not settings.GROQ_API_KEY:
         return {"configured": False}
-    reply = await _chat([{"role": "user", "content": "Reply with the single word: ok"}], max_tokens=5)
-    return {"configured": True, "ok": bool(reply), "model": settings.LLM_MODEL, "error": _last_error["llm"]}
+    reply = await _chat([{"role": "user", "content": "Reply with the single word: ok"}], max_tokens=20)
+    return {"configured": True, "ok": bool(reply), "model": settings.LLM_MODEL,
+            "usable_models": (_available["models"] or [])[:6], "error": _last_error["llm"]}
 
 
 def _system(lang: str) -> str:
