@@ -1,19 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api.js";
 import ResultCard from "./ResultCard.jsx";
-import { t } from "../i18n.js";
+import { t, RTL_LANGS, errorText } from "../i18n.js";
 
 // Sample lots: drop these files into frontend/public/samples/. A lot whose cover
 // (first file) is missing is hidden.
 const SAMPLE_LOTS = [
-  { label: "Apples", files: ["apple-1.jpg", "apple-2.jpg", "apple-3.jpg"] },
-  { label: "Oranges", files: ["orange-1.jpg", "orange-2.jpg", "orange-3.jpg", "orange-4.jpg"] },
-  { label: "Bananas", files: ["banana-1.jpg", "banana-2.jpg", "banana-3.jpg", "banana-4.jpg"] },
+  { key: "apple", files: ["apple-1.jpg", "apple-2.jpg", "apple-3.jpg"] },
+  { key: "orange", files: ["orange-1.jpg", "orange-2.jpg", "orange-3.jpg", "orange-4.jpg"] },
+  { key: "banana", files: ["banana-1.jpg", "banana-2.jpg", "banana-3.jpg", "banana-4.jpg"] },
 ];
 
 const MAX_SIDE = 1280;
 const MAX_PHOTOS = 12;
-const TIP = "Tip: pick 4-8 fruit at random from the crate and photograph each one close up. More photos, fairer grade.";
 
 async function compress(file) {
   try {
@@ -48,11 +47,10 @@ function previewsOf(scan) {
   return scan.preview ? [scan.preview] : []; // scans stored before multi-photo
 }
 
-function plural(n, word) {
-  return `${n} ${word}${n === 1 ? "" : "s"}`;
-}
-
 export default function Scan({ lang, onScanned, lastScan, user }) {
+  const s = t(lang);
+  const rtl = RTL_LANGS.has(lang);
+  const txt = rtl ? "rtl" : ""; // Nastaliq for running text blocks
   // Each photo: { url, file }. Photos restored from lastScan have file === null.
   const [photos, setPhotos] = useState(() => previewsOf(lastScan).map((url) => ({ url, file: null })));
   const [result, setResult] = useState(lastScan || null);
@@ -86,8 +84,8 @@ export default function Scan({ lang, onScanned, lastScan, user }) {
     const images = all.filter((f) => f.type.startsWith("image/"));
     const free = MAX_PHOTOS - photosRef.current.length;
     const take = images.slice(0, Math.max(0, free));
-    if (images.length < all.length) setError("Some files weren't images and were skipped.");
-    else if (take.length < images.length) setError(`Up to ${MAX_PHOTOS} photos per scan, extra ones were skipped.`);
+    if (images.length < all.length) setError(s.errNotImages);
+    else if (take.length < images.length) setError(s.errTooMany(MAX_PHOTOS));
     else setError("");
     if (!take.length) return;
 
@@ -141,7 +139,7 @@ export default function Scan({ lang, onScanned, lastScan, user }) {
       setAdding(false);
       await addFiles(ok);
     } catch {
-      setError("Couldn't load that sample.");
+      setError(s.errSample);
     } finally {
       setAdding(false);
     }
@@ -173,7 +171,7 @@ export default function Scan({ lang, onScanned, lastScan, user }) {
       lastScanRef.current = withPreviews;
       old.forEach((u) => u.startsWith("blob:") && URL.revokeObjectURL(u));
     } catch (err) {
-      setError(err.message);
+      setError(errorText(lang, err));
     } finally {
       setBusy(false);
     }
@@ -192,34 +190,40 @@ export default function Scan({ lang, onScanned, lastScan, user }) {
     <section className="scan">
       {!hasPhotos && !result && (
         <>
-          <p className="hello">Salam, {user.name.split(" ")[0]}. Pick a few fruit from the crate and snap each one close up, in daylight.</p>
+          <p className={`hello ${txt}`}>{s.hello(user.name.split(" ")[0])}</p>
           <div className="dropzone">
             <span className="dz-icon" aria-hidden>📷</span>
-            <span className="dz-title">Photograph your fruit</span>
-            <span className="dz-sub">Apples, bananas and oranges in this version</span>
+            <span className={`dz-title ${txt}`}>{s.dzTitle}</span>
+            <span className={`dz-sub ${txt}`}>{s.dzSub}</span>
             <div className="dz-actions">
               <button className="btn primary" onClick={() => cameraRef.current?.click()} disabled={adding}>
-                Take photo
+                {s.takePhoto}
               </button>
               <button className="btn ghost" onClick={() => galleryRef.current?.click()} disabled={adding}>
-                Choose photos
+                {s.choosePhotos}
               </button>
             </div>
           </div>
-          <p className="tip">{TIP}</p>
+          <p className={`tip ${txt}`}>{s.tip}</p>
 
           {visibleLots.length > 0 && (
             <div className="samples">
-              <span className="muted">No fruit nearby? Try a sample lot:</span>
+              <span className={`muted ${txt}`}>{s.sampleHint}</span>
               <div className="sample-row">
                 {visibleLots.map((lot) => (
-                  <button key={lot.label} className="sample" onClick={() => pickLot(lot)} disabled={adding}>
+                  <button
+                    key={lot.key}
+                    className="sample"
+                    data-lot={lot.key}
+                    onClick={() => pickLot(lot)}
+                    disabled={adding}
+                  >
                     <img
                       src={`/samples/${lot.files[0]}`}
-                      alt={lot.label}
-                      onError={() => setVisibleLots((v) => v.filter((x) => x.label !== lot.label))}
+                      alt={s.lots[lot.key]}
+                      onError={() => setVisibleLots((v) => v.filter((x) => x.key !== lot.key))}
                     />
-                    <span>{lot.label} · {lot.files.length} photos</span>
+                    <span>{s.lots[lot.key]} · {s.photos(lot.files.length)}</span>
                   </button>
                 ))}
               </div>
@@ -235,19 +239,19 @@ export default function Scan({ lang, onScanned, lastScan, user }) {
         <>
           {!result && (
             <div className="photo-head">
-              <span>{plural(photos.length, "photo")}</span>
-              <span className="muted">max {MAX_PHOTOS}</span>
+              <span>{s.photos(photos.length)}</span>
+              <span className="muted">{s.maxPhotos(MAX_PHOTOS)}</span>
             </div>
           )}
 
           <div className="photo-area">
-            <div className={`photo-grid ${result ? "done" : ""}`}>
+            <div className={`photo-grid ${result ? "done" : ""}`} dir="ltr">
               {photos.map((p, i) => {
                 const dets = result ? (result.detections || []).filter((d) => (d.image ?? 0) === i) : [];
                 return (
                   <figure key={p.url} className="photo-cell">
                     <div className={`preview ${result ? "" : "thumb"}`}>
-                      <img src={p.url} alt={`Photo ${i + 1}`} />
+                      <img src={p.url} alt={s.photoAlt(i + 1)} />
                       {dets.map((d, j) => (
                         <div
                           key={j}
@@ -259,7 +263,9 @@ export default function Scan({ lang, onScanned, lastScan, user }) {
                             height: `${(d.box[3] - d.box[1]) * 100}%`,
                           }}
                         >
-                          <span>{d.state === "rotten" ? "rotten" : "fresh"} {Math.round(d.confidence * 100)}%</span>
+                          <span dir={rtl ? "rtl" : "ltr"}>
+                            {d.state === "rotten" ? s.rotten : s.fresh} <bdi dir="ltr">{Math.round(d.confidence * 100)}%</bdi>
+                          </span>
                         </div>
                       ))}
                       {!result && (
@@ -267,28 +273,28 @@ export default function Scan({ lang, onScanned, lastScan, user }) {
                           className="remove"
                           onClick={() => removePhoto(i)}
                           disabled={locked}
-                          aria-label={`Remove photo ${i + 1}`}
+                          aria-label={s.removePhoto(i + 1)}
                         >
                           ×
                         </button>
                       )}
                     </div>
-                    {result && dets.length === 0 && <figcaption className="nothing">Nothing found</figcaption>}
+                    {result && dets.length === 0 && <figcaption className="nothing" dir={rtl ? "rtl" : "ltr"}>{s.nothingFound}</figcaption>}
                   </figure>
                 );
               })}
 
               {!result && room > 0 && (
-                <div className="add-tile">
+                <div className="add-tile" dir={rtl ? "rtl" : "ltr"}>
                   <span className="add-plus" aria-hidden>+</span>
-                  <button onClick={() => cameraRef.current?.click()} disabled={locked}>Take photo</button>
-                  <button onClick={() => galleryRef.current?.click()} disabled={locked}>From gallery</button>
+                  <button onClick={() => cameraRef.current?.click()} disabled={locked}>{s.takePhoto}</button>
+                  <button onClick={() => galleryRef.current?.click()} disabled={locked}>{s.fromGallery}</button>
                 </div>
               )}
             </div>
             {busy && (
               <div className="scanning">
-                <span>Checking {plural(photos.length, "photo")}…</span>
+                <span dir={rtl ? "rtl" : "ltr"}>{s.checking(photos.length)}</span>
               </div>
             )}
           </div>
@@ -297,15 +303,15 @@ export default function Scan({ lang, onScanned, lastScan, user }) {
 
       {hasPhotos && !result && (
         <div className="actions">
-          <p className="tip">{TIP}</p>
+          <p className={`tip ${txt}`}>{s.tip}</p>
           <label className="check">
             <input type="checkbox" checked={useLocation} onChange={(e) => setUseLocation(e.target.checked)} />
-            Use my location for weather (default: Swat)
+            <span className={txt}>{s.useLocation}</span>
           </label>
           <div className="btn-row">
-            <button className="btn ghost" onClick={reset} disabled={busy || adding}>Clear all</button>
+            <button className="btn ghost" onClick={reset} disabled={busy || adding}>{s.clearAll}</button>
             <button className="btn primary" onClick={analyse} disabled={busy || adding}>
-              {busy ? "Scanning…" : adding ? "Adding…" : `Scan ${plural(photos.length, "photo")}`}
+              {busy ? s.scanning : adding ? s.adding : s.scanPhotos(photos.length)}
             </button>
           </div>
         </div>
@@ -316,7 +322,7 @@ export default function Scan({ lang, onScanned, lastScan, user }) {
       {result && (
         <>
           <ResultCard scan={result} />
-          <button className="btn primary wide" onClick={reset}>{t(lang).scanAnother}</button>
+          <button className="btn primary wide" onClick={reset}>{s.scanAnother}</button>
         </>
       )}
     </section>

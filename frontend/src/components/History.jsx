@@ -1,43 +1,46 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
 import ResultCard from "./ResultCard.jsx";
+import { t, RTL_LANGS, errorText, fruitName } from "../i18n.js";
 
 function when(iso) {
   const d = new Date(iso);
   return d.toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
-export default function History() {
+export default function History({ lang }) {
+  const s = t(lang);
+  const rtl = RTL_LANGS.has(lang);
   const [items, setItems] = useState(null);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(null);
   const [open, setOpen] = useState(null);
 
   useEffect(() => {
     api("/api/scans")
       .then(setItems)
-      .catch((e) => setError(e.message));
+      .catch((e) => setError(e));
   }, []);
 
-  if (error) return <p className="error">{error}</p>;
-  if (!items) return <p className="muted center">Loading your scans…</p>;
-  if (!items.length) return <p className="muted center">No scans yet. Your scanned crates will show up here.</p>;
+  if (error) return <p className="error">{errorText(lang, error)}</p>;
+  if (!items) return <p className={`muted center ${rtl ? "rtl" : ""}`}>{s.histLoading}</p>;
+  if (!items.length) return <p className={`muted center ${rtl ? "rtl" : ""}`}>{s.histEmpty}</p>;
 
   return (
     <section className="history">
-      {items.map((s) => (
-        <div key={s.id} className="hist-item">
-          <button className="hist-row" onClick={() => setOpen(open === s.id ? null : s.id)} aria-expanded={open === s.id}>
-            <span className={`mini-grade grade-${s.grade}`}>{s.grade}</span>
+      {items.map((scan) => (
+        <div key={scan.id} className="hist-item">
+          <button className="hist-row" onClick={() => setOpen(open === scan.id ? null : scan.id)} aria-expanded={open === scan.id}>
+            <span className={`mini-grade grade-${scan.grade}`}>{scan.grade}</span>
             <span className="hist-main">
-              <strong>{s.total} {s.fruit !== "unknown" ? `${s.fruit}s` : "items"}</strong>
-              <span className="muted">{when(s.created_at)}</span>
+              <strong>{scan.total} {fruitName(lang, scan.fruit)}</strong>
+              <span className="muted" dir="ltr">{when(scan.created_at)}</span>
             </span>
             <span className="hist-side">
-              <span>{s.reject_pct}% damaged</span>
-              <span className="muted">{s.total ? `~${s.days_left} days` : "–"}</span>
+              <span>{s.damagedPct(scan.reject_pct)}</span>
+              <span className="muted">{scan.total ? s.daysApprox(scan.days_left) : "–"}</span>
             </span>
           </button>
-          {open === s.id && <ResultCard scan={s} compact />}
+          {open === scan.id && <ResultCard scan={scan} compact />}
         </div>
       ))}
     </section>

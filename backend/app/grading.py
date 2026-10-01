@@ -49,6 +49,14 @@ def _action(total: int, reject_pct: float, days: float, grade: str) -> str:
     return "sell_soon"
 
 
+def _range(days: float) -> list[float]:
+    """Whole days once the estimate is a few days long, halves below that."""
+    lo, hi = max(0.5, days * 0.7), days * 1.3
+    if days >= 3:
+        return [float(round(lo)), float(round(hi))]
+    return [round(lo * 2) / 2, round(hi * 2) / 2]
+
+
 def analyse(detections: list[dict], weather: dict) -> dict:
     total = len(detections)
     rotten = sum(1 for d in detections if d["state"] == "rotten")
@@ -82,7 +90,7 @@ def analyse(detections: list[dict], weather: dict) -> dict:
         "grade_label": grade_label,
         "fruit": dominant,
         "days_left": days,
-        "days_range": [max(0.5, round(days * 0.7, 1)), round(days * 1.3, 1)] if total else [0, 0],
+        "days_range": _range(days) if total else [0, 0],
         "action": _action(total, reject_pct, days, grade),
         "breakdown": breakdown,
         "detections": detections,

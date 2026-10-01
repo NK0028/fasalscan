@@ -53,7 +53,7 @@ FRUIT_UR = {
     "guava": ("امرود", "امرود"), "pomegranate": ("انار", "انار"), "grape": ("انگور", "انگور"),
 }
 FRUIT_PS = {
-    "apple": "مڼې", "banana": "کېلې", "orange": "مالټې", "peach": "شفتالو", "mango": "آم",
+    "apple": "مڼو", "banana": "کېلو", "orange": "مالټو", "peach": "شفتالو", "mango": "آم",
     "pear": "ناک", "plum": "آلوچې", "apricot": "زردآلو", "tomato": "رومیان", "grape": "انګور",
     "pomegranate": "انار", "guava": "امرود",
 }
@@ -235,12 +235,26 @@ async def llm_status() -> dict:
             "usable_models": (_available["models"] or [])[:6], "error": _last_error["llm"]}
 
 
+GLOSSARY = {
+    "ur": "Use everyday Urdu, not English loanwords when an Urdu word exists: apple سیب, banana کیلا/کیلے, "
+          "orange مالٹا/مالٹے, pulp گودا, crate کریٹ, ventilated crate ہوادار کریٹ, cold storage کولڈ اسٹوریج, rotten خراب.",
+    "ps": "Use everyday Pashto as spoken in Swat, not Urdu or English words when a Pashto word exists: apple مڼه/مڼې, "
+          "banana کېله/کېلې, orange مالټه/مالټې, humidity لندبل, temperature تودوخه, crate کریټ, "
+          "ventilated crate هوادار کریټ, rotten خراب. Watch gender agreement (اوسنۍ تودوخه).",
+    "en": "",
+}
+
+
 def _system(lang: str) -> str:
     return (
-        "You are FasalScan, a practical assistant for fruit growers and small traders in Pakistan. "
-        f"Always reply in {LANG_NAMES.get(lang, 'English')}. Speak simply, like an experienced mandi "
-        "trader would to a farmer. No markdown, no bullet lists, no headings. Never invent numbers: "
-        "only use the facts you are given, and call shelf life an estimate.\n\n" + HANDLING_NOTES
+        "You are FasalScan, a practical assistant for fruit growers and small traders in Swat, Pakistan. "
+        f"Always reply in {LANG_NAMES.get(lang, 'English')}. Speak simply, like an experienced mandi trader "
+        "talking to a farmer. No markdown, no lists, no headings. Write numbers with Western digits (0-9).\n"
+        "Rules: never invent numbers, only use the facts given. The counts are SAMPLES the farmer photographed "
+        "from a crate, not the whole crate, so say 'of the samples checked', never 'the crate has N fruit'. "
+        "Shelf life is an estimate. When a recommended action is given, give exactly that one action and do not "
+        "contradict it. Fruit always needs ventilated crates, never sealed or airtight boxes.\n"
+        + GLOSSARY.get(lang, "") + "\n\n" + HANDLING_NOTES
     )
 
 
@@ -252,8 +266,8 @@ async def summarise(report: dict, weather: dict, lang: str) -> str:
         {"role": "user", "content": (
             "Here is the result of scanning a crate photo:\n"
             f"{json.dumps(_facts(report, weather), ensure_ascii=False)}\n\n"
-            "Write 3 to 4 short sentences: what the lot looks like, how long it will roughly hold up, "
-            "and what to do next."
+            "Write 3 short sentences: what the samples show, roughly how long the lot will hold up, "
+            "and the one recommended action."
         )},
     ])
     return answer or template_summary(report, weather, lang)

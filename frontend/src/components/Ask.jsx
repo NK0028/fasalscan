@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api.js";
-
-const RTL = new Set(["ur", "ps"]);
+import { t, RTL_LANGS as RTL, errorText, fruitName } from "../i18n.js";
 
 const SUGGESTIONS = {
   en: ["Should I sell this today or wait?", "How do I store these to last longer?", "What can I do with the rotten ones?"],
@@ -33,6 +32,7 @@ export default function Ask({ lang, lastScan: scanFromTab }) {
   const endRef = useRef(null);
   const canRecord = Boolean(navigator.mediaDevices?.getUserMedia) && pickMime() !== null;
   const rtl = RTL.has(lang);
+  const s = t(lang);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -54,7 +54,7 @@ export default function Ask({ lang, lastScan: scanFromTab }) {
       });
       setMessages((m) => [...m, { role: "bot", text: res.answer, lang, ai: res.ai }]);
     } catch (err) {
-      setError(err.message);
+      setError(errorText(lang, err));
     } finally {
       setBusy(false);
     }
@@ -73,7 +73,7 @@ export default function Ask({ lang, lastScan: scanFromTab }) {
         const type = rec.mimeType || "audio/webm";
         const blob = new Blob(chunksRef.current, { type });
         if (blob.size < 1000) {
-          setError("That was too short, hold the button and speak.");
+          setError(s.errTooShort);
           return;
         }
         const ext = type.includes("mp4") ? "m4a" : type.includes("ogg") ? "ogg" : "webm";
@@ -86,7 +86,7 @@ export default function Ask({ lang, lastScan: scanFromTab }) {
           setBusy(false);
           await send(res.text);
         } catch (err) {
-          setError(err.message);
+          setError(errorText(lang, err));
           setBusy(false);
         }
       };
@@ -94,7 +94,7 @@ export default function Ask({ lang, lastScan: scanFromTab }) {
       recRef.current = rec;
       setRecording(true);
     } catch {
-      setError("Microphone permission was denied.");
+      setError(s.errMic);
     }
   }
 
@@ -105,10 +105,10 @@ export default function Ask({ lang, lastScan: scanFromTab }) {
 
   return (
     <section className="ask">
-      <p className="muted">
+      <p className={`muted ${rtl ? "rtl" : ""}`} dir={rtl ? "rtl" : "ltr"}>
         {lastScan
-          ? `Asking about your latest scan: ${lastScan.total} ${lastScan.fruit} samples, grade ${lastScan.grade}.`
-          : "Scan a crate first for answers about your own fruit, or ask a general question."}
+          ? s.askAbout(lastScan.total, fruitName(lang, lastScan.fruit, "fruitAttr"), lastScan.grade)
+          : s.askNoScan}
       </p>
 
       <div className="chat" aria-live="polite">
@@ -131,7 +131,7 @@ export default function Ask({ lang, lastScan: scanFromTab }) {
           return (
             <div key={i} className={`bubble ${m.role} ${r ? "rtl" : ""}`} dir={r ? "rtl" : "ltr"} lang={m.lang}>
               {m.text}
-              {m.role === "bot" && m.ai === false && <span className="offline-note" dir="ltr">offline answer</span>}
+              {m.role === "bot" && m.ai === false && <span className="offline-note">{s.offline}</span>}
             </div>
           );
         })}
@@ -151,7 +151,7 @@ export default function Ask({ lang, lastScan: scanFromTab }) {
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder={lang === "en" ? "Ask anything about your fruit…" : lang === "ur" ? "اپنا سوال لکھیں…" : "خپله پوښتنه ولیکئ…"}
+          placeholder={s.askPlaceholder}
           dir={rtl ? "rtl" : "ltr"}
           className={rtl ? "rtl" : ""}
           disabled={busy || recording}
@@ -162,13 +162,13 @@ export default function Ask({ lang, lastScan: scanFromTab }) {
             className={`mic ${recording ? "on" : ""}`}
             onClick={recording ? stopRecording : startRecording}
             disabled={busy}
-            aria-label={recording ? "Stop recording" : "Speak your question"}
+            aria-label={recording ? s.micStop : s.micStart}
           >
             {recording ? "■" : "🎤"}
           </button>
         )}
         <button className="btn primary" type="submit" disabled={busy || recording || !text.trim()}>
-          Send
+          {s.send}
         </button>
       </form>
     </section>

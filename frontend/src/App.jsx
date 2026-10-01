@@ -4,6 +4,7 @@ import Login from "./components/Login.jsx";
 import Scan from "./components/Scan.jsx";
 import History from "./components/History.jsx";
 import Ask from "./components/Ask.jsx";
+import { t, RTL_LANGS } from "./i18n.js";
 
 const LANGS = [
   { code: "en", label: "English" },
@@ -11,11 +12,7 @@ const LANGS = [
   { code: "ps", label: "پښتو" },
 ];
 
-const TABS = [
-  { id: "scan", label: "Scan" },
-  { id: "history", label: "History" },
-  { id: "ask", label: "Ask" },
-];
+const TABS = ["scan", "history", "ask"];
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -54,6 +51,10 @@ export default function App() {
     );
   }
 
+  const s = t(lang);
+  const rtl = RTL_LANGS.has(lang);
+  const dir = rtl ? "rtl" : "ltr";
+
   return (
     <div className="shell">
       <header className="topbar">
@@ -66,38 +67,38 @@ export default function App() {
             className="lang-select"
             value={lang}
             onChange={(e) => setLang(e.target.value)}
-            aria-label="Answer language"
+            aria-label={s.langSelect}
           >
             {LANGS.map((l) => (
               <option key={l.code} value={l.code}>{l.label}</option>
             ))}
           </select>
-          <button className="link-btn" onClick={logout}>Log out</button>
+          <button className="link-btn" onClick={logout} dir={dir}>{s.logout}</button>
         </div>
       </header>
 
-      <nav className="tabs" role="tablist">
-        {TABS.map((t) => (
+      <nav className="tabs" role="tablist" dir={dir}>
+        {TABS.map((id) => (
           <button
-            key={t.id}
+            key={id}
             role="tab"
-            aria-selected={tab === t.id}
-            className={tab === t.id ? "tab active" : "tab"}
-            onClick={() => setTab(t.id)}
+            aria-selected={tab === id}
+            className={tab === id ? "tab active" : "tab"}
+            onClick={() => setTab(id)}
           >
-            {t.label}
+            {s.tabs[id]}
           </button>
         ))}
       </nav>
 
-      <main className="content">
+      <main className="content" dir={dir}>
         {tab === "scan" && <Scan lang={lang} onScanned={setLastScan} lastScan={lastScan} user={user} />}
-        {tab === "history" && <History />}
+        {tab === "history" && <History lang={lang} />}
         {tab === "ask" && <Ask lang={lang} lastScan={lastScan} />}
       </main>
 
-      <footer className="foot">
-        Estimates only. Built with YOLOv8, Whisper and Llama 3.3. MVP by Naeem Khan.
+      <footer className={`foot ${rtl ? "rtl" : ""}`} dir={dir} lang={lang}>
+        {s.footer}
       </footer>
     </div>
   );

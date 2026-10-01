@@ -20,15 +20,15 @@ export default function ResultCard({ scan, compact = false }) {
         </div>
         <div className="stats">
           <div className="stat">
-            <span className="stat-num">{scan.total}</span>
+            <span className="stat-num" dir="ltr">{scan.total}</span>
             <span className="stat-cap" dir={textDir}>{s.samples(scan.total, scan.photos || 1)}</span>
           </div>
           <div className="stat">
-            <span className="stat-num bad">{fmt(scan.reject_pct)}%</span>
+            <span className="stat-num bad" dir="ltr">{fmt(scan.reject_pct)}%</span>
             <span className="stat-cap" dir={textDir}>{s.damaged}</span>
           </div>
           <div className="stat">
-            <span className="stat-num">{scan.total ? `~${fmt(scan.days_left)}` : "–"}</span>
+            <span className="stat-num" dir="ltr">{scan.total ? `~${fmt(scan.days_left)}` : "–"}</span>
             <span className="stat-cap" dir={textDir}>{s.daysLeft}</span>
           </div>
         </div>
