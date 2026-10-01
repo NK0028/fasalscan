@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api.js";
 import ResultCard from "./ResultCard.jsx";
+import { t } from "../i18n.js";
 
 // Sample lots: drop these files into frontend/public/samples/. A lot whose cover
 // (first file) is missing is hidden.
@@ -315,7 +316,7 @@ export default function Scan({ lang, onScanned, lastScan, user }) {
       {result && (
         <>
           <ResultCard scan={result} />
-          <button className="btn primary wide" onClick={reset}>Scan another crate</button>
+          <button className="btn primary wide" onClick={reset}>{t(lang).scanAnother}</button>
         </>
       )}
     </section>

@@ -20,6 +20,7 @@ from .db import Base, Scan, SessionLocal, User, engine, get_db
 from .detector import Detector
 from .grading import analyse
 from .weather import get_weather
+from .weather import last_error as weather_errors
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("fasalscan")
@@ -98,14 +99,19 @@ def root():
 
 
 @app.get("/api/health")
-def health():
+async def health(deep: bool = False):
     det = state["detector"]
-    return {
+    out = {
         "status": "ok",
         "model_loaded": bool(det and det.available),
         "classes": list(det.names.values()) if det and det.available else [],
         "llm_enabled": bool(settings.GROQ_API_KEY),
     }
+    if deep:  # live checks of the outside services, no secrets returned
+        w = await get_weather(settings.DEFAULT_LAT, settings.DEFAULT_LON)
+        out["weather"] = {"source": w["source"], "error": weather_errors["weather"]}
+        out["llm"] = await llm.llm_status()
+    return out
 
 
 @app.post("/api/auth/login")

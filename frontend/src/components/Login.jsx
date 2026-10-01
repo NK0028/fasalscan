@@ -42,7 +42,7 @@ export default function Login({ onLogin }) {
         <div className="login-head">
           <img src="/icon.svg" alt="" width="44" height="44" />
           <h1>FasalScan</h1>
-          <p>One photo of a crate. Grade, damage and how many days it has left.</p>
+          <p>A few close-up photos from a crate. Get its grade, how much is damaged and how many days it has left.</p>
         </div>
 
         <form

@@ -15,7 +15,14 @@ function pickMime() {
   return options.find((m) => MediaRecorder.isTypeSupported?.(m)) || "";
 }
 
-export default function Ask({ lang, lastScan }) {
+export default function Ask({ lang, lastScan: scanFromTab }) {
+  const [latest, setLatest] = useState(null);
+  const lastScan = scanFromTab || latest;
+  // After a reload the Scan tab has nothing in memory, so use the newest saved scan.
+  useEffect(() => {
+    if (scanFromTab) return;
+    api("/api/scans?limit=1").then((rows) => setLatest(rows?.[0] || null)).catch(() => {});
+  }, [scanFromTab]);
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -100,7 +107,7 @@ export default function Ask({ lang, lastScan }) {
     <section className="ask">
       <p className="muted">
         {lastScan
-          ? `Asking about your latest scan: ${lastScan.total} ${lastScan.fruit}s, grade ${lastScan.grade}.`
+          ? `Asking about your latest scan: ${lastScan.total} ${lastScan.fruit} samples, grade ${lastScan.grade}.`
           : "Scan a crate first for answers about your own fruit, or ask a general question."}
       </p>
 

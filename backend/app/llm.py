@@ -1,6 +1,6 @@
 """Plain-language summaries, Q&A and speech-to-text.
 
-Uses open-weight models (Llama 3.3 / Whisper) through Groq's OpenAI-compatible API.
+Uses open-weight models (Llama 3.3 / GPT-OSS / Whisper) through Groq's OpenAI-compatible API.
 If no key is configured, or the call fails, everything falls back to templates
 so the demo never breaks.
 """
@@ -36,10 +36,26 @@ ADVICE = {
     },
 }
 
+ADVICE["ps"] = {
+    "hold": "مال په ښه حالت کې دی. په سړه او سیوري ځای کې یې وساتئ، د ښه نرخ انتظار کولی شئ.",
+    "sell_soon": "کیفیت یې ښه دی، خو ډېر یې مه ساتئ. په راتلونکو څو ورځو کې یې وپلورئ.",
+    "sell_now": "دا مال ډېر نه پاتې کېږي. نن یا سبا یې وپلورئ.",
+    "sort_first": "د پلورلو نه مخکې خرابې مېوې جلا کړئ، که نه نورې به هم خرابې شي.",
+    "process": "د دې مال ډېره برخه خرابه ده. جلا یې کړئ او پاتې د جوس یا ګودې لپاره وپلورئ.",
+    "none": "په دې انځور کې هېڅ مېوه ونه موندل شوه. د ورځې په رڼا کې له نږدې بیا انځور واخلئ.",
+}
+
+# Urdu fruit names (singular, plural) and Pashto names.
 FRUIT_UR = {
-    "apple": "سیب", "banana": "کیلا", "orange": "مالٹا", "peach": "آڑو", "mango": "آم",
-    "pear": "ناشپاتی", "plum": "آلوچہ", "apricot": "خوبانی", "persimmon": "جاپانی پھل",
-    "tomato": "ٹماٹر", "guava": "امرود", "pomegranate": "انار", "grape": "انگور",
+    "apple": ("سیب", "سیب"), "banana": ("کیلا", "کیلے"), "orange": ("مالٹا", "مالٹے"),
+    "peach": ("آڑو", "آڑو"), "mango": ("آم", "آم"), "pear": ("ناشپاتی", "ناشپاتیاں"),
+    "plum": ("آلوچہ", "آلوچے"), "apricot": ("خوبانی", "خوبانیاں"), "tomato": ("ٹماٹر", "ٹماٹر"),
+    "guava": ("امرود", "امرود"), "pomegranate": ("انار", "انار"), "grape": ("انگور", "انگور"),
+}
+FRUIT_PS = {
+    "apple": "مڼې", "banana": "کېلې", "orange": "مالټې", "peach": "شفتالو", "mango": "آم",
+    "pear": "ناک", "plum": "آلوچې", "apricot": "زردآلو", "tomato": "رومیان", "grape": "انګور",
+    "pomegranate": "انار", "guava": "امرود",
 }
 
 HANDLING_NOTES = """Practical storage notes (use only if relevant):
@@ -52,35 +68,54 @@ HANDLING_NOTES = """Practical storage notes (use only if relevant):
 - Damaged fruit can still be sold for juice, jam, pulp or drying instead of being thrown away."""
 
 
-def _fmt_days(d: float) -> str:
-    return str(int(d)) if float(d).is_integer() else str(d)
+def _num(x: float) -> str:
+    """22.0 -> 22, 25.5 -> 25.5 (reads naturally inside a sentence)."""
+    x = round(float(x), 1)
+    return str(int(x)) if x.is_integer() else str(x)
 
 
 def template_summary(report: dict, weather: dict, lang: str) -> str:
-    lang = "ur" if lang in ("ur", "ps") else "en"
+    lang = lang if lang in ADVICE else "en"
     action = ADVICE[lang][report["action"]]
     if report["total"] == 0:
         return action
-    days = _fmt_days(report["days_left"])
-    temp = weather.get("outlook_c", weather["temp_c"])
+    days = _num(report["days_left"])
+    temp = _num(round(weather.get("outlook_c", weather["temp_c"])))
+    pct = _num(report["reject_pct"])
     total, rotten = report["total"], report["rotten"]
+    fruit_key = report["fruit"]
+
     if lang == "ur":
-        fruit = FRUIT_UR.get(report["fruit"], report["fruit"])
-        damaged = "کوئی خراب نہیں" if rotten == 0 else f"{rotten} خراب ہیں ({report['reject_pct']}٪)"
-        return (
-            f"تصاویر میں {total} {fruit} ملے، {damaged}۔ گریڈ: {report['grade']}۔ "
-            f"اگلے چند دنوں کے موسم (تقریباً {temp}°C) میں یہ اندازاً {days} دن ٹھیک رہیں گے۔ {action}"
+        sing, plur = FRUIT_UR.get(fruit_key, (fruit_key, fruit_key))
+        damaged = (
+            "کوئی بھی خراب نہیں" if rotten == 0
+            else ("سب خراب ہیں" if rotten == total else f"{rotten} خراب {'ہے' if rotten == 1 else 'ہیں'} ({pct}٪)")
         )
-    noun = report["fruit"] if total == 1 else _plural(report["fruit"])
+        return (
+            f"{plur if total > 1 else sing} کے {total} نمونے جانچے گئے، {damaged}۔ گریڈ: {report['grade']}۔ "
+            f"اگلے چند دنوں کا اوسط درجہ حرارت تقریباً {temp}°C ہے، اس میں یہ اندازاً {days} دن ٹھیک رہیں گے۔ {action}"
+        )
+    if lang == "ps":
+        fruit = FRUIT_PS.get(fruit_key, fruit_key)
+        damaged = (
+            "هېڅ یو خراب نه دی" if rotten == 0
+            else ("ټول خراب دي" if rotten == total else f"{rotten} یې خراب {'دی' if rotten == 1 else 'دي'} ({pct}٪)")
+        )
+        return (
+            f"د {fruit} {total} نمونې وکتل شوې، {damaged}. درجه: {report['grade']}. "
+            f"د راتلونکو ورځو منځنۍ تودوخه شاوخوا {temp}°C ده، په دې کې به دا اټکلاً {days} ورځې سم پاتې شي. {action}"
+        )
+
+    noun = fruit_key if total == 1 else _plural(fruit_key)
     if rotten == 0:
         damaged = "none of them damaged" if total > 1 else "no damage seen"
     elif rotten == total:
         damaged = "all of them damaged" if total > 1 else "and it is damaged"
     else:
-        damaged = f"{rotten} of them damaged ({report['reject_pct']}%)"
+        damaged = f"{rotten} of them damaged ({pct}%)"
     return (
-        f"Found {total} {noun}, {damaged}. Grade {report['grade']} ({report['grade_label']}). "
-        f"With the next few days around {temp}°C, expect roughly {days} days before quality drops. {action}"
+        f"Checked {total} {noun}, {damaged}. Grade {report['grade']} ({report['grade_label']}). "
+        f"With the next few days averaging about {temp}°C, expect roughly {days} days before quality drops. {action}"
     )
 
 
@@ -108,28 +143,55 @@ def _facts(report: dict, weather: dict) -> dict:
     }
 
 
+_FALLBACK_MODELS = ["llama-3.3-70b-versatile", "openai/gpt-oss-120b", "llama-3.1-8b-instant", "openai/gpt-oss-20b"]
+_last_error: dict = {"llm": None}
+
+
 async def _chat(messages: list[dict], max_tokens: int = 350) -> str | None:
     if not settings.GROQ_API_KEY:
         return None
-    try:
-        async with httpx.AsyncClient(timeout=settings.LLM_TIMEOUT) as client:
-            r = await client.post(
-                f"{settings.GROQ_BASE_URL}/chat/completions",
-                headers={"Authorization": f"Bearer {settings.GROQ_API_KEY}"},
-                json={
-                    "model": settings.LLM_MODEL,
-                    "messages": messages,
-                    "temperature": 0.4,
-                    "max_tokens": max_tokens,
-                },
-            )
-            r.raise_for_status()
-            text = r.json()["choices"][0]["message"]["content"]
-    except (httpx.HTTPError, KeyError, IndexError, ValueError) as exc:
-        log.warning("LLM call failed: %s", exc)
-        return None
-    text = re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()
-    return text or None
+    models = [settings.LLM_MODEL] + [m for m in _FALLBACK_MODELS if m != settings.LLM_MODEL]
+    async with httpx.AsyncClient(timeout=settings.LLM_TIMEOUT) as client:
+        for model in models:
+            try:
+                r = await client.post(
+                    f"{settings.GROQ_BASE_URL}/chat/completions",
+                    headers={"Authorization": f"Bearer {settings.GROQ_API_KEY}"},
+                    json={"model": model, "messages": messages, "temperature": 0.4, "max_tokens": max_tokens},
+                )
+            except httpx.HTTPError as exc:
+                _last_error["llm"] = f"{type(exc).__name__}: {exc}"
+                log.warning("LLM request failed (%s): %s", model, exc)
+                return None
+            if r.status_code in (400, 404) and "model" in r.text.lower():
+                _last_error["llm"] = f"{model}: {r.status_code} {r.text[:200]}"
+                log.warning("LLM model %s unavailable: %s", model, r.text[:300])
+                continue  # try the next model
+            if r.status_code != 200:
+                _last_error["llm"] = f"{model}: {r.status_code} {r.text[:200]}"
+                log.warning("LLM call failed (%s): %s %s", model, r.status_code, r.text[:300])
+                return None
+            try:
+                msg = r.json()["choices"][0]["message"]
+                text = msg.get("content") or ""
+            except (KeyError, IndexError, ValueError) as exc:
+                _last_error["llm"] = f"bad response: {exc}"
+                return None
+            text = re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()
+            if text:
+                if model != settings.LLM_MODEL:
+                    settings.LLM_MODEL = model  # remember the one that works
+                _last_error["llm"] = None
+                return text
+            return None
+    return None
+
+
+async def llm_status() -> dict:
+    if not settings.GROQ_API_KEY:
+        return {"configured": False}
+    reply = await _chat([{"role": "user", "content": "Reply with the single word: ok"}], max_tokens=5)
+    return {"configured": True, "ok": bool(reply), "model": settings.LLM_MODEL, "error": _last_error["llm"]}
 
 
 def _system(lang: str) -> str:
@@ -168,12 +230,18 @@ async def ask(question: str, report: dict | None, weather: dict | None, lang: st
     if answer:
         return answer, True
     if report and weather:
-        return template_summary(report, weather, lang), False
+        lead = {
+            "en": "The AI advisor is busy right now, so here is what your latest scan shows: ",
+            "ur": "اے آئی مشیر ابھی مصروف ہے، آپ کے آخری سکین کا خلاصہ یہ ہے: ",
+            "ps": "د AI مشاور اوس بوخت دی، ستاسو د وروستي سکین لنډیز دا دی: ",
+        }.get(lang, "")
+        return lead + template_summary(report, weather, lang), False
     fallback = {
         "en": "The advisor is offline right now. Scan a crate first and I'll give you the grade and shelf-life estimate.",
         "ur": "مشیر ابھی دستیاب نہیں۔ پہلے کریٹ کی تصویر سکین کریں، میں گریڈ اور اندازاً دن بتا دوں گا۔",
+        "ps": "مشاور اوس شتون نه لري. لومړی د کریټ انځور سکین کړئ، زه به درجه او اټکلي ورځې درته ووایم.",
     }
-    return fallback["ur" if lang in ("ur", "ps") else "en"], False
+    return fallback.get(lang, fallback["en"]), False
 
 
 async def transcribe(audio: bytes, filename: str, content_type: str, lang: str) -> str:

@@ -1,15 +1,15 @@
 # FasalScan
 
-Photograph a crate of fruit, get a grade, the share that's damaged, and an estimate of how many days it has before quality drops. Answers in English, Urdu or Pashto, by text or voice.
+Pick a few fruit from a crate, snap each one close up, and get the lot's grade, the share that's damaged, and an estimate of how many days it has before quality drops. Answers in English, Urdu or Pashto, by text or voice.
 
-**Live demo:** _add your Vercel link here_ · Demo login: `demo@fasalscan.app` / `demo1234`
+**Live demo:** https://fasalscan.vercel.app · Demo login: `demo@fasalscan.app` / `demo1234`
 
 ## How it works
 
-1. The phone resizes the photo and uploads it.
-2. A YOLOv8n model (ONNX Runtime, CPU) finds every fruit and labels it fresh or rotten.
+1. The phone resizes the photos (up to 12 per lot) and uploads them.
+2. A YOLOv8n model (ONNX Runtime, CPU) labels each fruit (or bunch) fresh or rotten. It was trained on close-ups, so the app grades a lot from several close-up samples, the way inspectors sample a crate.
 3. A grading step turns counts into a grade (A ≤5% damaged, B ≤15%, C ≤35%, D above).
-4. Shelf life is estimated from fruit type, damage share and the next few days of temperature from Open-Meteo (Q10 ≈ 2 rule of thumb).
+4. Shelf life is estimated from fruit type, damage share and the next few days of temperature from Open-Meteo (Q10 ≈ 2 rule of thumb), falling back to the seasonal average for Swat.
 5. An open-weight LLM (Llama 3.3 70B, served via Groq) writes a short plain-language summary and answers follow-up questions. Whisper handles voice. Without an API key, built-in English/Urdu templates take over so the app never breaks.
 
 ## Stack
